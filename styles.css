@@ -1,0 +1,19 @@
+/*
+This CSS file will be included with your plugin, and available in the app when your plugin is enabled.
+*/
+
+/* URL Input Modal Styles */
+.summarizer-modal-input {
+	width: 100%;
+	margin-bottom: 1rem;
+	padding: 0.5rem;
+}
+
+.summarizer-modal-buttons {
+	display: flex;
+	gap: 0.5rem;
+}
+
+.summarizer-modal-buttons button {
+	flex: 1;
+}
