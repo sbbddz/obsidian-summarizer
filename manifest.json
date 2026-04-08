@@ -4,6 +4,6 @@
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "Summarize external web content and save it in Obsidian for later review.",
-	"author": "",
+	"author": "@sbbddz",
 	"isDesktopOnly": false
 }

@@ -2,15 +2,19 @@ import {App, PluginSettingTab, Setting} from "obsidian";
 import SummarizerPlugin from "./main";
 
 export interface SummarizerSettings {
-	openrouterApiKey: string;
+	apiKey: string;
+	apiBaseUrl: string;
 	model: string;
 	folder: string;
+	includeMetadataHeader: boolean;
 }
 
 export const DEFAULT_SETTINGS: SummarizerSettings = {
-	openrouterApiKey: '',
+	apiKey: '',
+	apiBaseUrl: 'https://openrouter.ai/api/v1',
 	model: 'openai/gpt-4o-mini',
-	folder: 'Summaries'
+	folder: 'Summaries',
+	includeMetadataHeader: true
 };
 
 export class SummarizerSettingTab extends PluginSettingTab {
@@ -26,21 +30,28 @@ export class SummarizerSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setName('OpenRouter')
+			.setName('AI Provider')
 			.setHeading();
 
 		new Setting(containerEl)
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setName('Api key')
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc('Your OpenRouter API key')
+			.setName('API key')
+			.setDesc('Your API key')
 			.addText(text => text
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				.setPlaceholder('sk-or-...')
-				.setValue(this.plugin.settings.openrouterApiKey)
+				.setPlaceholder('sk-...')
+				.setValue(this.plugin.settings.apiKey)
 				.onChange(async (value) => {
-					this.plugin.settings.openrouterApiKey = value;
+					this.plugin.settings.apiKey = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('API base URL')
+			.setDesc('Base URL for the AI API (e.g., https://openrouter.ai/api/v1)')
+			.addText(text => text
+				.setPlaceholder('https://openrouter.ai/api/v1')
+				.setValue(this.plugin.settings.apiBaseUrl)
+				.onChange(async (value) => {
+					this.plugin.settings.apiBaseUrl = value;
 					await this.plugin.saveSettings();
 				}));
 
@@ -64,6 +75,16 @@ export class SummarizerSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.folder)
 				.onChange(async (value) => {
 					this.plugin.settings.folder = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Include metadata header')
+			.setDesc('Add YAML frontmatter with tags and description to summary files')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.includeMetadataHeader)
+				.onChange(async (value) => {
+					this.plugin.settings.includeMetadataHeader = value;
 					await this.plugin.saveSettings();
 				}));
 	}
