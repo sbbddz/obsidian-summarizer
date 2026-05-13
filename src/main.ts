@@ -1,34 +1,44 @@
-import {App, Modal, Notice, Plugin, TFile, Editor, Menu, View, htmlToMarkdown, requestUrl} from 'obsidian';
+import {App, Modal, Notice, Plugin, TFile, Editor, Menu, View, htmlToMarkdown, requestUrl, RequestUrlParam} from 'obsidian';
 import {SummarizerSettings, DEFAULT_SETTINGS, SummarizerSettingTab} from "./settings";
 import {fetchTranscript} from 'youtube-transcript';
 import {extractText, getDocumentProxy} from 'unpdf';
+
+async function requestUrlLogged(params: RequestUrlParam): Promise<any> {
+	try {
+		return await requestUrl(params);
+	} catch (err: any) {
+		const status = err?.status ?? err?.response?.status;
+		const body = err?.text ?? err?.response?.text;
+		if (body) {
+			console.warn(`[HTTP ${status ?? 'error'}] ${params.method ?? 'GET'} ${params.url}\nResponse body:`, body);
+		} else {
+			console.warn(`[HTTP ${status ?? 'error'}] ${params.method ?? 'GET'} ${params.url}`, err);
+		}
+		throw err;
+	}
+}
 
 const SYSTEM_PROMPT = `You are a helpful assistant that summarizes {contentType}.
 
 STRICT OUTPUT FORMAT - You MUST follow this exact structure:
 - Start directly with the first topic heading
-- Each section must have a heading starting with "# " followed by the topic name
+- Each section MUST have a heading starting with "## " followed by the topic name
+- Always use ONLY TWO "## " as heading size. Never more.
 - Follow each heading with ONE paragraph explaining that topic
-- Use 2-4 sections maximum
-- Use 2 sections minimum
+- Aim for minimum of 2 sections up to 8 sections depending on how info-dense the content is
+- Sections should not exceed 3-4 lines
 - No introductions, conclusions, or filler text
 - No bullet points, lists, or nested headings
 
 Example:
-# Topic One
+## Topic One
 Explanation of the first main point.
 
-# Topic Two
+## Topic Two
 Explanation of the second main point.`;
 
-const KEY_IDEAS_PROMPT = `From the following {contentType}, extract 5-10 concise bullet points representing the key ideas or main takeaways.
-Format each bullet as a concise phrase (not a full sentence).
+const KEY_IDEAS_PROMPT = `From the following {contentType}, extract a minimum of 5 concise bullet points representing the key ideas or main takeaways.
 Do not include introductory text.`;
-
-const METADATA_PROMPT = `From the following {contentType}, extract metadata for an Obsidian note.
-Return ONLY valid JSON with this exact structure. ONLY valid JSON without markdown annotations:
-{"tags": ["tag1", "tag2", "tag3"], "description": "Brief 1-2 sentence description of the content."}
-Do not include any text outside the JSON.`;
 
 const EXTEND_PROMPT = `You are an assistant that expands text passages. Given the selected paragraph from a summary and the original {contentType}, expand the paragraph with more relevant details from the original content. Keep the same writing style, tone, and level of detail as the original paragraph. Only output the expanded paragraph - no introductions or explanations.`;
 
@@ -58,11 +68,6 @@ function getContentTypeLabel(type: ContentType): string {
 
 interface OpenRouterResponse {
 	choices: Array<{ message: { content: string } }>;
-}
-
-interface SummarizerMetadata {
-	tags: string[];
-	description: string;
 }
 
 class URLInputModal extends Modal {
@@ -176,17 +181,17 @@ function extractPdfTitle(url: string): string {
 async function detectContentType(url: string): Promise<ContentType> {
 	if (extractYouTubeVideoId(url)) return 'youtube';
 	try {
-		const response = await requestUrl({url, method: 'HEAD'});
+		const response = await requestUrlLogged({url, method: 'HEAD'});
 		const contentType = response.headers?.['content-type'] || '';
 		if (contentType.includes('application/pdf')) return 'pdf';
-	} catch { /* ignore HEAD request errors */ }
+	} catch { /* fall through to 'web' */ }
 	return 'web';
 }
 
 function createObsidianFetch(): typeof fetch {
 	return async (input, init) => {
 		const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-		const response = await requestUrl({
+		const response = await requestUrlLogged({
 			url,
 			method: (init?.method as 'GET' | 'POST') || 'GET',
 			headers: init?.headers as Record<string, string>,
@@ -250,15 +255,13 @@ export default class SummarizerPlugin extends Plugin {
 			console.log(content)
 
 			new Notice('Generating summary and key ideas...');
-			const [summary, keyIdeas, metadataJson] = await Promise.all([
+			const [summary, keyIdeas] = await Promise.all([
 				this.callOpenAICompatible(title, content, type, 'summary'),
 				this.callOpenAICompatible(title, content, type, 'keyIdeas'),
-				this.callOpenAICompatible(title, content, type, 'metadata'),
 			]);
 
-			const metadata: SummarizerMetadata = JSON.parse(metadataJson);
 			new Notice('Saving summary...');
-			await this.saveSummary(url, title, summary, keyIdeas, metadata);
+			await this.saveSummary(url, title, summary.trim(), keyIdeas.trim());
 			new Notice('Summary saved successfully!');
 		} catch (error: unknown) {
 			console.error(`${type} summarization error:`, error);
@@ -270,7 +273,7 @@ export default class SummarizerPlugin extends Plugin {
 		switch (type) {
 			case 'web': {
 				new Notice('Fetching content...');
-				const response = await requestUrl({url, method: 'GET'});
+				const response = await requestUrlLogged({url, method: 'GET'});
 				const text = response.text || '';
 				const content = htmlToMarkdown(text) || '';
 				const titleMatch = text.match(/<title[^>]*>([^<]*)<\/title>/i);
@@ -282,7 +285,7 @@ export default class SummarizerPlugin extends Plugin {
 				if (!videoId) throw new Error('Invalid YouTube URL');
 
 				new Notice('Fetching video info...');
-				const oembed = (await requestUrl({url: `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`, method: 'GET'})).json as {title: string};
+				const oembed = (await requestUrlLogged({url: `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`, method: 'GET'})).json as {title: string};
 				
 				new Notice('Fetching transcript...');
 				const transcript = await fetchTranscript(videoId, {fetch: createObsidianFetch()});
@@ -291,7 +294,7 @@ export default class SummarizerPlugin extends Plugin {
 			
 			case 'pdf': {
 				new Notice('Fetching PDF...');
-				const response = await requestUrl({url, method: 'GET'});
+				const response = await requestUrlLogged({url, method: 'GET'});
 				const pdf = await getDocumentProxy(new Uint8Array(response.arrayBuffer));
 				
 				new Notice('Extracting text from PDF...');
@@ -319,17 +322,15 @@ export default class SummarizerPlugin extends Plugin {
 		let systemPrompt: string;
 		if (mode === 'summary') {
 			systemPrompt = SYSTEM_PROMPT.replace('{contentType}', contentTypeDesc);
-		} else if (mode === 'keyIdeas') {
-			systemPrompt = KEY_IDEAS_PROMPT.replace('{contentType}', contentTypeDesc);
 		} else {
-			systemPrompt = METADATA_PROMPT.replace('{contentType}', contentTypeDesc);
+			systemPrompt = KEY_IDEAS_PROMPT.replace('{contentType}', contentTypeDesc);
 		}
 
 		const userPrompt = mode === 'summary'
-			? `Please summarize the following ${contentTypeLabel}:\n\nTitle: ${title}\n\nContent:\n${truncatedContent}`
+			? `Summarize in a comprehensive way the following ${contentTypeLabel}:\n\nTitle: ${title}\n\nContent:\n${truncatedContent}`
 			: `Title: ${title}\n\nContent:\n${truncatedContent}`;
 
-		const response = await requestUrl({
+		const response = await requestUrlLogged({
 			url: `${this.settings.apiBaseUrl}/chat/completions`,
 			method: 'POST',
 			headers: {
@@ -380,7 +381,7 @@ export default class SummarizerPlugin extends Plugin {
 
 		const userPrompt = `Selected paragraph to expand:\n${selectedText}\n\nOriginal ${getContentTypeLabel(sourceType)} content:\n${truncatedContent}`;
 
-		const response = await requestUrl({
+		const response = await requestUrlLogged({
 			url: `${this.settings.apiBaseUrl}/chat/completions`,
 			method: 'POST',
 			headers: {
@@ -436,38 +437,34 @@ export default class SummarizerPlugin extends Plugin {
 		url: string,
 		title: string,
 		summary: string,
-		keyIdeas: string,
-		metadata: SummarizerMetadata
+		keyIdeas: string
 	): Promise<void> {
 		const folder = this.settings.folder;
 		if (!await this.app.vault.adapter.exists(folder)) await this.app.vault.createFolder(folder);
 
-		const safeTitle = title.replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, '-').substring(0, 100);
+		const safeTitle = title.replace(/[^A-Za-z0-9 ]/g, '').replace(/\s+/g, '-').substring(0, 100);
 		const filepath = `${folder}/${new Date().toISOString().split('T')[0]}-${safeTitle}.md`;
 
 		let fileContent: string;
 		if (this.settings.includeMetadataHeader) {
 			const created = new Date().toISOString().split('T')[0];
 			const sourceType = this.getSourceType(url);
-			const tagsYaml = metadata.tags.length > 0 ? `\ntags:\n${metadata.tags.slice(0, 6).map(t => `  - ${this.normalizeTag(t)}`).join('\n')}` : '';
 
 			fileContent = `---
 created: ${created}
 source: ${url}
-source-type: ${sourceType}${tagsYaml}
-description: ${metadata.description}
+source-type: ${sourceType}
+tags:
+  - summaries
 ---
-
 ${summary}
 
 ## Key Ideas
-
 ${keyIdeas}`;
 		} else {
 			fileContent = `${summary}
 
 ## Key Ideas
-
 ${keyIdeas}`;
 		}
 
@@ -485,7 +482,4 @@ ${keyIdeas}`;
 		return 'web';
 	}
 
-	private normalizeTag(tag: string): string {
-		return tag.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-	}
 }
