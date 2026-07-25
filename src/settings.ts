@@ -30,13 +30,14 @@ export class SummarizerSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('AI Provider')
+			.setName('AI provider')
 			.setHeading();
 
 		new Setting(containerEl)
 			.setName('API key')
 			.setDesc('Your API key')
 			.addText(text => text
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				.setPlaceholder('sk-...')
 				.setValue(this.plugin.settings.apiKey)
 				.onChange(async (value) => {

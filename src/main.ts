@@ -1,14 +1,15 @@
-import {App, Modal, Notice, Plugin, TFile, Editor, Menu, View, htmlToMarkdown, requestUrl, RequestUrlParam} from 'obsidian';
+import {App, Modal, Notice, Plugin, TFile, Editor, Menu, MarkdownView, MarkdownFileInfo, htmlToMarkdown, requestUrl, RequestUrlParam, RequestUrlResponse} from 'obsidian';
 import {SummarizerSettings, DEFAULT_SETTINGS, SummarizerSettingTab} from "./settings";
 import {fetchTranscript} from 'youtube-transcript';
 import {extractText, getDocumentProxy} from 'unpdf';
 
-async function requestUrlLogged(params: RequestUrlParam): Promise<any> {
+async function requestUrlLogged(params: RequestUrlParam): Promise<RequestUrlResponse> {
 	try {
 		return await requestUrl(params);
-	} catch (err: any) {
-		const status = err?.status ?? err?.response?.status;
-		const body = err?.text ?? err?.response?.text;
+	} catch (err: unknown) {
+		const error = err as { status?: number; text?: string; response?: { status?: number; text?: string } };
+		const status = error.status ?? error.response?.status;
+		const body = error.text ?? error.response?.text;
 		if (body) {
 			console.warn(`[HTTP ${status ?? 'error'}] ${params.method ?? 'GET'} ${params.url}\nResponse body:`, body);
 		} else {
@@ -228,7 +229,7 @@ export default class SummarizerPlugin extends Plugin {
 			callback: () => new URLInputModal(this.app, u => void this.summarize(u)).open()
 		});
 
-		this.registerEvent(this.app.workspace.on('editor-menu', this.createExtendContextMenuHandler() as any));
+		this.registerEvent(this.app.workspace.on('editor-menu', this.createExtendContextMenuHandler()));
 
 		this.addSettingTab(new SummarizerSettingTab(this.app, this));
 	}
@@ -309,7 +310,7 @@ export default class SummarizerPlugin extends Plugin {
 		title: string,
 		content: string,
 		type: ContentType,
-		mode: 'summary' | 'keyIdeas' | 'metadata'
+		mode: 'summary' | 'keyIdeas'
 	): Promise<string> {
 		const truncatedContent = content.length > 80000
 			? content.substring(0, 80000) + '\n\n[Content truncated due to length]'
@@ -403,11 +404,11 @@ export default class SummarizerPlugin extends Plugin {
 	}
 
 	private createExtendContextMenuHandler = () => {
-		return (menu: Menu, editor: Editor, view: View) => {
+		return (menu: Menu, editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
 			const selectedText = editor.getSelection();
 			if (!selectedText.trim()) return;
 
-			const file = (view as any).file as TFile | undefined;
+			const file = info.file;
 			if (!file) return;
 
 			const cache = this.app.metadataCache.getFileCache(file);
