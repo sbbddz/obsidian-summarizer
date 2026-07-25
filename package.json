@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "summarizer",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "Summarize web pages, YouTube videos, and PDFs using AI and save them in your vault.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
@@ -11,7 +11,7 @@
 		"lint": "eslint ."
 	},
 	"keywords": [],
-	"license": "0-BSD",
+	"license": "MIT",
 	"devDependencies": {
 		"@eslint/js": "9.30.1",
 		"@types/node": "^16.11.6",

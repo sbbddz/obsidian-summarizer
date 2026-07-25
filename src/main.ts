@@ -252,7 +252,6 @@ export default class SummarizerPlugin extends Plugin {
 		const type = await detectContentType(url);
 		try {
 			const {title, content} = await this.fetchContent(url, type);
-			console.log(content)
 
 			new Notice('Generating summary and key ideas...');
 			const [summary, keyIdeas] = await Promise.all([
