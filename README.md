@@ -5,6 +5,7 @@ An [Obsidian](https://obsidian.md) plugin that uses AI to summarize web pages, Y
 ## Features
 
 - **Summarize URLs** — paste any URL and get a structured markdown summary
+- **Summarize notes** — pick any markdown note in your vault and get a structured markdown summary
 - **Extract key ideas** — each summary includes a bulleted list of main takeaways
 - **Extend paragraphs** — right-click any paragraph in a summary to expand it with more detail from the original source
 - **Multi-format support** — works with web pages, YouTube videos (via transcripts), and PDFs
@@ -36,6 +37,10 @@ Search for "Summarizer" in **Settings → Community plugins → Browse**.
 
 Open the command palette (`Cmd/Ctrl+P`) and run **Summarize URL**. Paste any link — the plugin detects the content type automatically and generates a summary.
 
+### Summarize a note
+
+Open the command palette (`Cmd/Ctrl+P`) and run **Summarize note**, then search and select the note. You can also right-click a note in the file explorer and choose **Summarize note**.
+
 ### Extend a paragraph
 
 In any note with a `source` frontmatter field (automatically set by the plugin), select a paragraph, right-click, and choose **Extend with original content**. The plugin fetches the original source and expands the selection with additional context.
@@ -47,6 +52,7 @@ In any note with a `source` frontmatter field (automatically set by the plugin),
 | Web pages | HTML content extracted and converted to markdown |
 | YouTube | Video transcripts fetched automatically |
 | PDF | Text extracted from PDF documents |
+| Vault notes | Markdown files in your vault |
 
 ## Development
 

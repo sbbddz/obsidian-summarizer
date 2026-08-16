@@ -33,6 +33,10 @@ This CSS file will be included with your plugin, and available in the app when y
 	margin-bottom: 0.5rem;
 }
 
+.summarizer-suggestion-path {
+	opacity: 0.6;
+}
+
 .modal-content h2 {
 	margin-top: 0;
 }

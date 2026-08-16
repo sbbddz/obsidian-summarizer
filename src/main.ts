@@ -1,4 +1,4 @@
-import {App, Modal, Notice, Plugin, TFile, Editor, Menu, MarkdownView, MarkdownFileInfo, htmlToMarkdown, requestUrl, RequestUrlParam, RequestUrlResponse} from 'obsidian';
+import {App, FuzzyMatch, FuzzySuggestModal, Modal, Notice, Plugin, TFile, Editor, Menu, MarkdownView, MarkdownFileInfo, htmlToMarkdown, requestUrl, RequestUrlParam, RequestUrlResponse} from 'obsidian';
 import {SummarizerSettings, DEFAULT_SETTINGS, SummarizerSettingTab} from "./settings";
 import {fetchTranscript} from 'youtube-transcript';
 import {extractText, getDocumentProxy} from 'unpdf';
@@ -43,7 +43,7 @@ Do not include introductory text.`;
 
 const EXTEND_PROMPT = `You are an assistant that expands text passages. Given the selected paragraph from a summary and the original {contentType}, expand the paragraph with more relevant details from the original content. Keep the same writing style, tone, and level of detail as the original paragraph. Only output the expanded paragraph - no introductions or explanations.`;
 
-type ContentType = 'web' | 'youtube' | 'pdf';
+type ContentType = 'web' | 'youtube' | 'pdf' | 'vault';
 
 function getContentTypeDescription(type: ContentType): string {
 	switch (type) {
@@ -51,6 +51,8 @@ function getContentTypeDescription(type: ContentType): string {
 			return 'YouTube video content from transcripts. Write the summary in the SAME LANGUAGE as the transcript content.';
 		case 'pdf':
 			return 'PDF documents';
+		case 'vault':
+			return 'Markdown notes. Write the summary in the SAME LANGUAGE as the note content.';
 		case 'web':
 			return 'web content';
 	}
@@ -62,6 +64,8 @@ function getContentTypeLabel(type: ContentType): string {
 			return 'video transcript';
 		case 'pdf':
 			return 'PDF document';
+		case 'vault':
+			return 'markdown note';
 		case 'web':
 			return 'web page';
 	}
@@ -69,6 +73,30 @@ function getContentTypeLabel(type: ContentType): string {
 
 interface OpenRouterResponse {
 	choices: Array<{ message: { content: string } }>;
+}
+
+class NotePickerModal extends FuzzySuggestModal<TFile> {
+	constructor(app: App, private onChoose: (file: TFile) => void) {
+		super(app);
+		this.setPlaceholder('Search note...');
+	}
+
+	getItems(): TFile[] {
+		return this.app.vault.getMarkdownFiles();
+	}
+
+	getItemText(file: TFile): string {
+		return file.basename;
+	}
+
+	renderSuggestion(item: FuzzyMatch<TFile>, el: HTMLElement): void {
+		el.createEl('div', {text: item.item.basename});
+		el.createEl('small', {text: item.item.path, cls: 'summarizer-suggestion-path'});
+	}
+
+	onChooseItem(file: TFile): void {
+		this.onChoose(file);
+	}
 }
 
 class URLInputModal extends Modal {
@@ -226,8 +254,24 @@ export default class SummarizerPlugin extends Plugin {
 		this.addCommand({
 			id: 'summarize-url',
 			name: 'Summarize URL',
-			callback: () => new URLInputModal(this.app, u => void this.summarize(u)).open()
+			callback: () => new URLInputModal(this.app, u => void this.summarizeUrl(u)).open()
 		});
+
+		this.addCommand({
+			id: 'summarize-note',
+			name: 'Summarize note',
+			callback: () => new NotePickerModal(this.app, f => void this.summarizeSource(f.path, 'vault')).open()
+		});
+
+		this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => {
+			if (file instanceof TFile && file.extension === 'md') {
+				menu.addItem((item) => {
+					item.setTitle('Summarize note')
+						.setIcon('sparkles')
+						.onClick(() => void this.summarizeSource(file.path, 'vault'));
+				});
+			}
+		}));
 
 		this.registerEvent(this.app.workspace.on('editor-menu', this.createExtendContextMenuHandler()));
 
@@ -244,15 +288,19 @@ export default class SummarizerPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	private async summarize(url: string): Promise<void> {
+	private async summarizeUrl(url: string): Promise<void> {
+		const type = await detectContentType(url);
+		await this.summarizeSource(url, type);
+	}
+
+	private async summarizeSource(source: string, type: ContentType): Promise<void> {
 		if (!this.settings.apiKey) {
 			new Notice('Configure your API key in plugin settings');
 			return;
 		}
 
-		const type = await detectContentType(url);
 		try {
-			const {title, content} = await this.fetchContent(url, type);
+			const {title, content} = await this.fetchContent(source, type);
 
 			new Notice('Generating summary and key ideas...');
 			const [summary, keyIdeas] = await Promise.all([
@@ -261,7 +309,7 @@ export default class SummarizerPlugin extends Plugin {
 			]);
 
 			new Notice('Saving summary...');
-			await this.saveSummary(url, title, summary.trim(), keyIdeas.trim());
+			await this.saveSummary(source, title, summary.trim(), keyIdeas.trim(), type);
 			new Notice('Summary saved successfully!');
 		} catch (error: unknown) {
 			console.error(`${type} summarization error:`, error);
@@ -302,6 +350,14 @@ export default class SummarizerPlugin extends Plugin {
 				
 				if (!text?.trim()) throw new Error('PDF appears to be empty or contains only images');
 				return {title: extractPdfTitle(url), content: text};
+			}
+			
+			case 'vault': {
+				const file = this.app.vault.getAbstractFileByPath(url);
+				if (!(file instanceof TFile) || file.extension !== 'md') throw new Error('Note not found');
+				const content = await this.app.vault.cachedRead(file);
+				if (!content.trim()) throw new Error('Note is empty');
+				return {title: file.basename, content};
 			}
 		}
 	}
@@ -414,13 +470,13 @@ export default class SummarizerPlugin extends Plugin {
 			const cache = this.app.metadataCache.getFileCache(file);
 			const sourceUrl = cache?.frontmatter?.source as string | undefined;
 			if (!sourceUrl) return;
+			const sourceType = (cache?.frontmatter?.['source-type'] as ContentType | undefined) ?? this.getSourceType(sourceUrl);
 
 			menu.addItem((item) => {
 				item.setTitle('Extend with original content')
 					.setIcon('sparkles')
 					.onClick(async () => {
 						try {
-							const sourceType = this.getSourceType(sourceUrl);
 							const extendedText = await this.extendParagraph(selectedText, sourceUrl, sourceType);
 							new ExtendParagraphModal(this.app, selectedText, extendedText, (accepted) => {
 								editor.replaceSelection(accepted);
@@ -434,26 +490,27 @@ export default class SummarizerPlugin extends Plugin {
 	};
 
 	private async saveSummary(
-		url: string,
+		source: string,
 		title: string,
 		summary: string,
-		keyIdeas: string
+		keyIdeas: string,
+		type: ContentType
 	): Promise<void> {
 		const folder = this.settings.folder;
 		if (!await this.app.vault.adapter.exists(folder)) await this.app.vault.createFolder(folder);
 
-		const safeTitle = title.replace(/[^A-Za-z0-9 ]/g, '').replace(/\s+/g, '-').substring(0, 100);
-		const filepath = `${folder}/${safeTitle}.md`;
+		const safeTitle = title.replace(/[^A-Za-z0-9 ]/g, '').replace(/\s+/g, '-').substring(0, 100) || 'Untitled';
+		let filepath = `${folder}/${safeTitle}.md`;
+		if (filepath === source) filepath = `${folder}/${safeTitle}-summary.md`;
 
 		let fileContent: string;
 		if (this.settings.includeMetadataHeader) {
 			const created = new Date().toISOString().split('T')[0];
-			const sourceType = this.getSourceType(url);
 
 			fileContent = `---
 created: ${created}
-source: ${url}
-source-type: ${sourceType}
+source: ${source}
+source-type: ${type}
 tags:
   - summaries
 ---
@@ -479,6 +536,7 @@ ${keyIdeas}`;
 	private getSourceType(url: string): ContentType {
 		if (/(?:youtube\.com|youtu\.be)/.test(url)) return 'youtube';
 		if (url.toLowerCase().endsWith('.pdf')) return 'pdf';
+		if (url.toLowerCase().endsWith('.md') && this.app.vault.getAbstractFileByPath(url) instanceof TFile) return 'vault';
 		return 'web';
 	}
 
