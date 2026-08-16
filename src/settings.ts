@@ -37,8 +37,7 @@ export class SummarizerSettingTab extends PluginSettingTab {
 			.setName('API key')
 			.setDesc('Your API key')
 			.addText(text => text
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				.setPlaceholder('sk-...')
+				.setPlaceholder('Your API key (sk-...)')
 				.setValue(this.plugin.settings.apiKey)
 				.onChange(async (value) => {
 					this.plugin.settings.apiKey = value;
@@ -60,8 +59,7 @@ export class SummarizerSettingTab extends PluginSettingTab {
 			.setName('Model')
 			.setDesc('Model to use for summarization')
 			.addText(text => text
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				.setPlaceholder('openai/gpt-4o-mini')
+				.setPlaceholder('Model name (e.g. openai/gpt-4o-mini)')
 				.setValue(this.plugin.settings.model)
 				.onChange(async (value) => {
 					this.plugin.settings.model = value;

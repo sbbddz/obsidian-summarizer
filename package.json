@@ -1,6 +1,6 @@
 {
 	"name": "summarizer",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "Summarize web pages, YouTube videos, and PDFs using AI and save them in your vault.",
 	"main": "main.js",
 	"type": "module",

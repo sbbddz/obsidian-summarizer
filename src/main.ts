@@ -3,7 +3,7 @@ import {SummarizerSettings, DEFAULT_SETTINGS, SummarizerSettingTab} from "./sett
 import {fetchTranscript} from 'youtube-transcript';
 import {extractText, getDocumentProxy} from 'unpdf';
 
-async function requestUrlLogged(params: RequestUrlParam): Promise<RequestUrlResponse> {
+async function requestUrlLogged(params: RequestUrlParam): Promise<Omit<RequestUrlResponse, 'json'> & {json: unknown}> {
 	try {
 		return await requestUrl(params);
 	} catch (err: unknown) {
@@ -222,7 +222,7 @@ function createObsidianFetch(): typeof fetch {
 		const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
 		const response = await requestUrlLogged({
 			url,
-			method: (init?.method as 'GET' | 'POST') || 'GET',
+			method: init?.method || 'GET',
 			headers: init?.headers as Record<string, string>,
 			body: init?.body as string,
 		});
@@ -231,13 +231,13 @@ function createObsidianFetch(): typeof fetch {
 			status: response.status,
 			statusText: '',
 			headers: new Headers(),
-			json: async () => response.json as unknown,
+			json: async () => response.json,
 			text: async () => response.text,
 			arrayBuffer: async () => response.arrayBuffer,
 			blob: async () => new Blob([response.arrayBuffer]),
 			clone: function() { return this; },
 			body: null, bodyUsed: false, redirected: false,
-			type: 'basic' as ResponseType, url,
+			type: 'basic', url,
 			formData: async () => { throw new Error('Not implemented'); },
 			bytes: async () => { throw new Error('Not implemented'); }
 		} as Response;
