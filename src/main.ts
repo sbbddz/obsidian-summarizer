@@ -443,7 +443,7 @@ export default class SummarizerPlugin extends Plugin {
 		if (!await this.app.vault.adapter.exists(folder)) await this.app.vault.createFolder(folder);
 
 		const safeTitle = title.replace(/[^A-Za-z0-9 ]/g, '').replace(/\s+/g, '-').substring(0, 100);
-		const filepath = `${folder}/${new Date().toISOString().split('T')[0]}-${safeTitle}.md`;
+		const filepath = `${folder}/${safeTitle}.md`;
 
 		let fileContent: string;
 		if (this.settings.includeMetadataHeader) {
