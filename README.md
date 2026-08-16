@@ -1,6 +1,6 @@
 # Summarizer
 
-An [Obsidian](https://obsidian.md) plugin that uses AI to summarize web pages, YouTube videos, and PDFs, then saves the results as structured notes in your vault.
+An [Obsidian](https://obsidian.md) plugin that uses AI to summarize web pages, YouTube videos, PDFs, and markdown notes, then saves the results as structured notes in your vault.
 
 ## Features
 
@@ -8,9 +8,9 @@ An [Obsidian](https://obsidian.md) plugin that uses AI to summarize web pages, Y
 - **Summarize notes** — pick any markdown note in your vault and get a structured markdown summary
 - **Extract key ideas** — each summary includes a bulleted list of main takeaways
 - **Extend paragraphs** — right-click any paragraph in a summary to expand it with more detail from the original source
-- **Multi-format support** — works with web pages, YouTube videos (via transcripts), and PDFs
+- **Multi-format support** — works with web pages, YouTube videos (via transcripts), PDFs, and markdown notes
 - **Configurable AI backend** — use any OpenAI-compatible API (OpenRouter by default)
-- **Metadata frontmatter** — summaries include YAML frontmatter with source URL, date, and tags
+- **Metadata frontmatter** — summaries include YAML frontmatter with the source URL or vault path, date, and tags
 
 ## Installation
 
